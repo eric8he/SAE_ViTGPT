@@ -33,23 +33,27 @@
                 <div class="text-gray-600 text-center">
                     <p>Viewing activations across [[ totalImages ]] images</p>
                     <p class="mt-2">Enter neuron index (0-[[ maxNeuronIndex ]])</p>
+                    <p class="mt-1 text-sm">
+                        [[ nonzeroNeurons.length ]] neurons with nonzero activations
+                    </p>
                 </div>
                 <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
                     <div class="flex items-center space-x-2">
-                        <button @click="previousNeuron" 
+                        <button @click="previousNonzeroNeuron" 
                                 class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50"
-                                :disabled="currentNeuron <= 0">
+                                :disabled="!prevNeuron">
                             ←
                         </button>
                         <input type="number" 
                                v-model.number="currentNeuron" 
                                class="px-4 py-2 border rounded-lg w-32 text-center"
+                               :class="{ 'bg-red-50': isZeroNeuron }"
                                min="0"
                                :max="maxNeuronIndex"
                                @change="validateAndLoad">
-                        <button @click="nextNeuron"
+                        <button @click="nextNonzeroNeuron"
                                 class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50"
-                                :disabled="currentNeuron >= maxNeuronIndex">
+                                :disabled="!nextNeuron">
                             →
                         </button>
                     </div>
@@ -57,9 +61,10 @@
                             class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600">
                         View Neuron
                     </button>
-                    <button @click="randomNeuron"
-                            class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600">
-                        Random Neuron
+                    <button @click="randomNonzeroNeuron"
+                            class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600"
+                            :disabled="!nonzeroNeurons.length">
+                        Random Active Neuron
                     </button>
                 </div>
                 <div v-if="error" class="text-red-500 text-center">
@@ -71,6 +76,13 @@
         <div v-if="loading" class="text-center py-12">
             <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto"></div>
             <p class="text-xl text-gray-600 mt-4">Loading...</p>
+        </div>
+
+        <div v-else-if="isZeroNeuron" class="text-center py-12">
+            <p class="text-xl text-gray-600">This neuron has no activations</p>
+            <p class="mt-4 text-gray-500">
+                Use the navigation buttons or "Random Active Neuron" to view neurons with nonzero activations
+            </p>
         </div>
 
         <div v-else-if="images.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -109,10 +121,14 @@
             data: {
                 currentNeuron: 0,
                 maxNeuronIndex: 0,
-                totalImages: 3232,  // From the server logs
+                totalImages: 3232,
                 images: [],
                 loading: false,
-                error: null
+                error: null,
+                nonzeroNeurons: [],
+                prevNeuron: null,
+                nextNeuron: null,
+                isZeroNeuron: false
             },
             methods: {
                 validateAndLoad() {
@@ -130,9 +146,10 @@
                         const response = await axios.get(`/neuron/${this.currentNeuron}`);
                         this.images = response.data.images;
                         this.maxNeuronIndex = response.data.maxNeuronIndex;
-                        if (!this.images.length) {
-                            this.error = 'No images found for this neuron';
-                        }
+                        this.nonzeroNeurons = response.data.nonzeroNeurons;
+                        this.prevNeuron = response.data.prevNeuron;
+                        this.nextNeuron = response.data.nextNeuron;
+                        this.isZeroNeuron = response.data.isZero;
                     } catch (error) {
                         console.error('Error loading neuron data:', error);
                         this.error = error.response?.data?.error || 'Error loading neuron data';
@@ -140,21 +157,24 @@
                     }
                     this.loading = false;
                 },
-                previousNeuron() {
-                    if (this.currentNeuron > 0) {
-                        this.currentNeuron--;
+                previousNonzeroNeuron() {
+                    if (this.prevNeuron !== null) {
+                        this.currentNeuron = this.prevNeuron;
                         this.loadNeuronData();
                     }
                 },
-                nextNeuron() {
-                    if (this.currentNeuron < this.maxNeuronIndex) {
-                        this.currentNeuron++;
+                nextNonzeroNeuron() {
+                    if (this.nextNeuron !== null) {
+                        this.currentNeuron = this.nextNeuron;
                         this.loadNeuronData();
                     }
                 },
-                randomNeuron() {
-                    this.currentNeuron = Math.floor(Math.random() * (this.maxNeuronIndex + 1));
-                    this.loadNeuronData();
+                randomNonzeroNeuron() {
+                    if (this.nonzeroNeurons.length) {
+                        const randomIndex = Math.floor(Math.random() * this.nonzeroNeurons.length);
+                        this.currentNeuron = this.nonzeroNeurons[randomIndex];
+                        this.loadNeuronData();
+                    }
                 }
             },
             mounted() {
