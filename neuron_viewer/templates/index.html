@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neuron Viewer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .image-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 100%; /* Creates a square container */
+        }
+        .image-container img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* This will maintain aspect ratio */
+            background-color: #f3f4f6; /* Light gray background */
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="app" class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold mb-8 text-center text-gray-800">Neuron Activation Viewer</h1>
+        
+        <div class="mb-8">
+            <div class="flex flex-col items-center justify-center space-y-4">
+                <div class="text-gray-600 text-center">
+                    <p>Viewing activations across [[ totalImages ]] images</p>
+                    <p class="mt-2">Enter neuron index (0-[[ maxNeuronIndex ]])</p>
+                </div>
+                <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <button @click="previousNeuron" 
+                                class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+                                :disabled="currentNeuron <= 0">
+                            ←
+                        </button>
+                        <input type="number" 
+                               v-model.number="currentNeuron" 
+                               class="px-4 py-2 border rounded-lg w-32 text-center"
+                               min="0"
+                               :max="maxNeuronIndex"
+                               @change="validateAndLoad">
+                        <button @click="nextNeuron"
+                                class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+                                :disabled="currentNeuron >= maxNeuronIndex">
+                            →
+                        </button>
+                    </div>
+                    <button @click="validateAndLoad" 
+                            class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600">
+                        View Neuron
+                    </button>
+                    <button @click="randomNeuron"
+                            class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600">
+                        Random Neuron
+                    </button>
+                </div>
+                <div v-if="error" class="text-red-500 text-center">
+                    [[ error ]]
+                </div>
+            </div>
+        </div>
+
+        <div v-if="loading" class="text-center py-12">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="text-xl text-gray-600 mt-4">Loading...</p>
+        </div>
+
+        <div v-else-if="images.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="(image, index) in images" 
+                 :key="index" 
+                 class="bg-white p-4 rounded-lg shadow-lg transform hover:scale-105 transition-transform duration-200">
+                <div class="image-container">
+                    <img :src="image.url" 
+                         class="rounded"
+                         :alt="'Top activation ' + (index + 1)"
+                         :style="{ objectFit: 'contain' }">
+                </div>
+                <div class="mt-4 text-center">
+                    <p class="text-lg font-semibold text-gray-800">
+                        Rank #[[ index + 1 ]]
+                    </p>
+                    <p class="text-gray-600">
+                        Activation: [[ image.activation.toFixed(4) ]]
+                    </p>
+                    <p class="text-sm text-gray-500">
+                        [[ image.width ]] × [[ image.height ]] px
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div v-else-if="!loading" class="text-center py-12">
+            <p class="text-xl text-gray-600">No images found for this neuron</p>
+        </div>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            delimiters: ['[[', ']]'],
+            data: {
+                currentNeuron: 0,
+                maxNeuronIndex: 0,
+                totalImages: 3232,  // From the server logs
+                images: [],
+                loading: false,
+                error: null
+            },
+            methods: {
+                validateAndLoad() {
+                    this.error = null;
+                    if (this.currentNeuron < 0 || this.currentNeuron > this.maxNeuronIndex) {
+                        this.error = `Please enter a neuron index between 0 and ${this.maxNeuronIndex}`;
+                        return;
+                    }
+                    this.loadNeuronData();
+                },
+                async loadNeuronData() {
+                    this.loading = true;
+                    this.error = null;
+                    try {
+                        const response = await axios.get(`/neuron/${this.currentNeuron}`);
+                        this.images = response.data.images;
+                        this.maxNeuronIndex = response.data.maxNeuronIndex;
+                        if (!this.images.length) {
+                            this.error = 'No images found for this neuron';
+                        }
+                    } catch (error) {
+                        console.error('Error loading neuron data:', error);
+                        this.error = error.response?.data?.error || 'Error loading neuron data';
+                        this.images = [];
+                    }
+                    this.loading = false;
+                },
+                previousNeuron() {
+                    if (this.currentNeuron > 0) {
+                        this.currentNeuron--;
+                        this.loadNeuronData();
+                    }
+                },
+                nextNeuron() {
+                    if (this.currentNeuron < this.maxNeuronIndex) {
+                        this.currentNeuron++;
+                        this.loadNeuronData();
+                    }
+                },
+                randomNeuron() {
+                    this.currentNeuron = Math.floor(Math.random() * (this.maxNeuronIndex + 1));
+                    this.loadNeuronData();
+                }
+            },
+            mounted() {
+                this.loadNeuronData();
+            }
+        });
+    </script>
+</body>
+</html>
